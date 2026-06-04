@@ -3,17 +3,44 @@ name: Build iStore OS
 on:
   repository_dispatch:
   workflow_dispatch:
-    # inputs:
-      # ssh:
-        # description: 'SSH connection to Actions'
-        # required: false
-        # default: 'false'
+    inputs:
+      openwrt_board:
+        description: "选择要编译的设备"
+        required: false
+        default: "panther_x2"
+        type: choice
+        options:
+          - panther_x2
+          - jp_tvbox
+          - fastrhino_r6xs
+          - fastrhino_r66s
+          - fastrhino_r68s
+          - firefly_station-p2
+          - friendlyarm_nanopi-r5s
+          - friendlyarm_nanopi-r6s
+          - hinlink_h88k
+          - hinlink_opc-h6xk
+          - dg_nas-lite
+          - ezpro_mrkaio-m68s
+          - ezpro_mrkaio-m68s-plus
+          - dg_tn3568
+          - yijiahe_jm10
+          - xunlong_orangepi-5-plus
+          - lyt_t68m
+      source_branch:
+        description: "选择源码分支"
+        required: false
+        default: "istoreos-24.10"
+        type: choice
+        options:
+          - istoreos-24.10
+          - istoreos-23.05
+          - main
   schedule:
    - cron: 0 16 * * *
 
 env:
   REPO_URL: https://github.com/istoreos/istoreos
-  REPO_BRANCH: istoreos-24.10
   FEEDS_CONF: feeds.conf
   CONFIG_FILE: .config
   DIY_P1_SH: diy-part1.sh
@@ -33,9 +60,7 @@ jobs:
     strategy:
       matrix:
         REPO_BRANCH:
-          # - main
-          - istoreos-24.10
-          # - istoreos-23.05
+          - ${{ github.event.inputs.source_branch || 'istoreos-24.10' }}
         ARCHITECTURE:
           - rk35xx
         os:
@@ -44,6 +69,16 @@ jobs:
       fail-fast: false
 
     steps:
+    - name: 设置设备名称
+      id: set-board
+      run: |
+        BOARD="${{ github.event.inputs.openwrt_board || 'panther_x2' }}"
+        echo "BOARD=${BOARD}" >> $GITHUB_ENV
+        echo "============================================"
+        echo "  编译设备: ${BOARD}"
+        echo "  源码分支: ${{ matrix.REPO_BRANCH }}"
+        echo "============================================"
+
     - name: 合并磁盘
       uses: easimon/maximize-build-space@master
       with:
@@ -106,20 +141,6 @@ jobs:
         df -h
         echo "------------------------------- 设置时区 -------------------------------"
         sudo timedatectl set-timezone "$TZ"
-        
-    # - name: 清理 /home/runner 分区空间
-    #   run: |
-    #     # 删除系统包管理器缓存
-    #     sudo rm -rf /home/runner/.cache /home/runner/.npm /home/runner/.rustup /home/runner/.cargo
-    #     # 删除可能存在的旧的 ccache（如果 ccache 目录在 /home/runner 下）
-    #     sudo rm -rf /home/runner/.ccache
-    #     # 清理临时文件
-    #     sudo rm -rf /home/runner/.local/share/containers
-    #     # 如果之前编译失败，残留的 dl 或 build_dir 可以删除（但注意这会丢失已下载的源码包）
-    #     # 建议在 workdir/openwrt 下执行：
-    #     # rm -rf workdir/openwrt/dl/*  （保留可能会重新下载）
-    #     # rm -rf workdir/openwrt/build_dir   （强制重新编译，牺牲时间换空间）
-    #     df -h /home/runner
 
     - name: 克隆源码
       working-directory: ${{ env.WORKDIR_PATH }}/workdir
@@ -136,7 +157,7 @@ jobs:
         prefix: ${{ github.workspace }}/openwrt
       env:
         CCACHE_DIR: /tmp/ccache
-        
+
     - name: 限制 ccache 大小
       run: ccache -M 1G
 
@@ -170,14 +191,7 @@ jobs:
         [ -e $CONFIG_FILE_PATH ] && mv $CONFIG_FILE_PATH openwrt/$CONFIG_FILE
         chmod +x $DIY_P2_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
-
-    # - name: SSH 连接到 Actions
-      # uses: P3TERX/ssh2actions@main
-      # if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-      # env:
-        # TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        $GITHUB_WORKSPACE/$DIY_P2_SH "${{ env.BOARD }}"
 
     - name: 下载软件包
       id: package
@@ -187,7 +201,7 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-        
+
     - name: 清理旧的构建产物
       run: |
         cd openwrt
@@ -227,7 +241,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt_bin${{ env.FILE_DATE }}
+        name: OpenWrt_bin_${{ env.BOARD }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
     - name: 整理固件文件
@@ -243,17 +257,17 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: OpenWrt_firmware${{ env.FILE_DATE }}
+        name: OpenWrt_firmware_${{ env.BOARD }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: 生成发布标签
       id: tag
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ matrix.ARCHITECTURE }}" >> ${GITHUB_OUTPUT}
+        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ env.BOARD }}" >> ${GITHUB_OUTPUT}
         touch release.txt
         echo "
-        💻 架构: ${{ matrix.ARCHITECTURE }}
+        💻 设备: ${{ env.BOARD }}
 
         📂 源码: ${{ env.REPO_URL }}
 

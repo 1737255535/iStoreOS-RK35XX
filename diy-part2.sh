@@ -7,6 +7,9 @@
 # Blog: https://p3terx.com
 #===============================================
 
+# 接收设备名称参数（从 workflow 传入）
+BOARD_NAME="${1:-panther_x2}"
+
 # enable rk3568 model adc keys
 cp -f $GITHUB_WORKSPACE/configfiles/adc-keys.txt adc-keys.txt
 ! grep -q 'adc-keys {' package/boot/uboot-rk35xx/src/arch/arm/dts/rk3568-easepi.dts && sed -i '/\"rockchip,rk3568\";/r adc-keys.txt' package/boot/uboot-rk35xx/src/arch/arm/dts/rk3568-easepi.dts
@@ -89,13 +92,72 @@ git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-a
 cp -a $GITHUB_WORKSPACE/configfiles/dts/rk356x/* target/linux/rockchip/dts/rk3568/
 
 # ============================================
-# 强制只编译 Panther X2，忽略其他所有设备
+# 根据传入的设备名称动态选择编译设备
 # ============================================
-echo ">>> 强制只选择 Panther X2 设备配置"
+echo ">>> 编译设备: ${BOARD_NAME}"
+
 # 清除所有 rockchip 设备的选择
 sed -i '/CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_/d' .config
-# 只启用 Panther X2
-echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_panther_x2=y' >> .config
+
+# 根据设备名称设置对应的 CONFIG 选项
+case "${BOARD_NAME}" in
+    panther_x2)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_panther_x2=y' >> .config
+        ;;
+    jp_tvbox)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_jp_tvbox=y' >> .config
+        ;;
+    fastrhino_r6xs)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_fastrhino_r6xs=y' >> .config
+        ;;
+    fastrhino_r66s)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_fastrhino_r66s=y' >> .config
+        ;;
+    fastrhino_r68s)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_fastrhino_r68s=y' >> .config
+        ;;
+    firefly_station-p2)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_firefly_station-p2=y' >> .config
+        ;;
+    friendlyarm_nanopi-r5s)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_friendlyarm_nanopi-r5s=y' >> .config
+        ;;
+    friendlyarm_nanopi-r6s)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_friendlyarm_nanopi-r6s=y' >> .config
+        ;;
+    hinlink_h88k)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_hinlink_h88k=y' >> .config
+        ;;
+    hinlink_opc-h6xk)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_hinlink_opc-h6xk=y' >> .config
+        ;;
+    dg_nas-lite)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_dg_nas-lite=y' >> .config
+        ;;
+    ezpro_mrkaio-m68s)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_ezpro_mrkaio-m68s=y' >> .config
+        ;;
+    ezpro_mrkaio-m68s-plus)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_ezpro_mrkaio-m68s-plus=y' >> .config
+        ;;
+    dg_tn3568)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_dg_tn3568=y' >> .config
+        ;;
+    yijiahe_jm10)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_yijiahe_jm10=y' >> .config
+        ;;
+    xunlong_orangepi-5-plus)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_xunlong_orangepi-5-plus=y' >> .config
+        ;;
+    lyt_t68m)
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_lyt_t68m=y' >> .config
+        ;;
+    *)
+        echo "未知设备: ${BOARD_NAME}，使用默认 panther_x2"
+        echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_panther_x2=y' >> .config
+        ;;
+esac
+
 # 禁止多设备编译（避免产生多个固件）
 echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
 
