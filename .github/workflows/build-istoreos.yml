@@ -47,9 +47,9 @@ jobs:
     - name: 合并磁盘
       uses: easimon/maximize-build-space@master
       with:
-        swap-size-mb: 1024
-        temp-reserve-mb: 100
-        root-reserve-mb: 1024
+        swap-size-mb: 4096
+        temp-reserve-mb: 512
+        root-reserve-mb: 256
 
     - name: 准备完成
       uses: actions/checkout@main
@@ -93,6 +93,16 @@ jobs:
         sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* dotnet* moby* snapd* android* || true
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
+        echo "------------------------------- 深度清理系统空间 -------------------------------"
+        sudo rm -rf /usr/share/doc /usr/share/man /usr/share/locale /usr/share/info
+        sudo rm -rf /usr/share/vim /usr/share/nano /usr/share/lintian /usr/share/linda
+        sudo rm -rf /usr/local/lib /usr/local/share /usr/local/bin
+        sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
+        sudo rm -rf /var/cache/pip /root/.cache
+        sudo rm -rf /snap /var/snap
+        sudo rm -rf /usr/share/pixmaps /usr/share/icons /usr/share/applications
+        sudo rm -rf /usr/share/fonts /usr/share/groff /usr/share/texinfo
+        df -h
         echo "------------------------------- 设置时区 -------------------------------"
         sudo timedatectl set-timezone "$TZ"
         
@@ -127,7 +137,7 @@ jobs:
         CCACHE_DIR: /tmp/ccache
         
     - name: 限制 ccache 大小
-      run: ccache -M 2G
+      run: ccache -M 1G
 
     - name: 加载自定义 feeds
       env:
@@ -143,6 +153,14 @@ jobs:
 
     - name: 安装 feeds
       run: cd openwrt && ./scripts/feeds install -a
+
+    - name: 清理 feeds 和 git 缓存释放空间
+      run: |
+        cd openwrt
+        find feeds -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
+        find . -name ".git" -maxdepth 2 -type d -exec rm -rf {} + 2>/dev/null || true
+        rm -rf tmp
+        df -h
 
     - name: 加载自定义配置
       env:
@@ -174,6 +192,8 @@ jobs:
       run: |
         cd openwrt
         rm -rf build_dir/target-* staging_dir/target-*
+        rm -rf tmp .tmp
+        df -h
 
     - name: 检查可用磁盘空间
       run: |
@@ -189,6 +209,13 @@ jobs:
         cd openwrt
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "------------------------------- 编译完成，清理中间文件释放空间 -------------------------------"
+        find build_dir -name "*.o" -delete 2>/dev/null || true
+        find staging_dir -name "*.o" -delete 2>/dev/null || true
+        find build_dir -name "*.a" -delete 2>/dev/null || true
+        rm -rf staging_dir/toolchain-* 2>/dev/null || true
+        rm -rf tmp .tmp
+        df -h
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
         echo "status=success" >> ${GITHUB_OUTPUT}
 
