@@ -311,10 +311,21 @@ jobs:
 
     - name: 检查可用磁盘空间
       run: |
-        AVAIL=$(df -BG --output=avail / | tail -1 | tr -d 'G ')
-        if [ "$AVAIL" -lt 5 ]; then
-          echo "磁盘剩余空间不足 5GB，终止编译"
+        echo "============================================"
+        echo "  磁盘空间检查"
+        echo "============================================"
+        df -h
+        echo ""
+        AVAIL_ROOT=$(df -BG --output=avail / | tail -1 | tr -d 'G ')
+        AVAIL_WORK=$(df -BG --output=avail ${GITHUB_WORKSPACE} 2>/dev/null | tail -1 | tr -d 'G ' || echo "0")
+        echo "根分区可用空间: ${AVAIL_ROOT}GB"
+        echo "工作目录可用空间: ${AVAIL_WORK}GB"
+        echo ""
+        if [ "${AVAIL_ROOT}" -lt 3 ] && [ "${AVAIL_WORK}" -lt 3 ]; then
+          echo "磁盘剩余空间不足 3GB，终止编译"
           exit 1
+        elif [ "${AVAIL_ROOT}" -lt 2 ] || [ "${AVAIL_WORK}" -lt 2 ]; then
+          echo "警告: 磁盘空间较低，编译可能失败"
         fi
 
     - name: 编译固件
