@@ -87,3 +87,17 @@ git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-a
 
 # 复制dts设备树文件到指定目录下
 cp -a $GITHUB_WORKSPACE/configfiles/dts/rk356x/* target/linux/rockchip/dts/rk3568/
+
+# ============================================
+# 强制只编译 Panther X2，忽略其他所有设备
+# ============================================
+echo ">>> 强制只选择 Panther X2 设备配置"
+# 清除所有 rockchip 设备的选择
+sed -i '/CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_/d' .config
+# 只启用 Panther X2
+echo 'CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_panther_x2=y' >> .config
+# 禁止多设备编译（避免产生多个固件）
+echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
+
+# 重新生成默认配置
+make defconfig
