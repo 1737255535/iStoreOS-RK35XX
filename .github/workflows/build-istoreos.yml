@@ -102,6 +102,20 @@ jobs:
         sudo -E apt-get -qq clean
         echo "------------------------------- 设置时区 -------------------------------"
         sudo timedatectl set-timezone "$TZ"
+        
+    - name: 清理 /home/runner 分区空间
+      run: |
+        # 删除系统包管理器缓存
+        sudo rm -rf /home/runner/.cache /home/runner/.npm /home/runner/.rustup /home/runner/.cargo
+        # 删除可能存在的旧的 ccache（如果 ccache 目录在 /home/runner 下）
+        sudo rm -rf /home/runner/.ccache
+        # 清理临时文件
+        sudo rm -rf /home/runner/.local/share/containers
+        # 如果之前编译失败，残留的 dl 或 build_dir 可以删除（但注意这会丢失已下载的源码包）
+        # 建议在 workdir/openwrt 下执行：
+        # rm -rf workdir/openwrt/dl/*  （保留可能会重新下载）
+        # rm -rf workdir/openwrt/build_dir   （强制重新编译，牺牲时间换空间）
+        df -h /home/runner
 
     - name: 克隆源码
       working-directory: ${{ env.WORKDIR_PATH }}/workdir
@@ -116,6 +130,8 @@ jobs:
         ccache: 'true'
         mixkey: ${{ matrix.os }}-${{ matrix.ARCHITECTURE }}-${{ matrix.REPO_BRANCH }}
         prefix: ${{ github.workspace }}/openwrt
+      env:
+        CCACHE_DIR: /tmp/ccache
 
     - name: 加载自定义 feeds
       env:
@@ -157,6 +173,13 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+        
+    # - name: 清理旧的编译目录
+    #   run: |
+    #     cd openwrt
+    #     rm -rf build_dir
+    #     rm -rf staging_dir/target-*   # 可选
+
 
     - name: 编译固件
       id: compile
