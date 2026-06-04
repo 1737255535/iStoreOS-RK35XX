@@ -7,8 +7,14 @@
 # Blog: https://p3terx.com
 #===============================================
 
-# 接收设备名称参数（从 workflow 传入）
+# 接收设备名称和内核版本参数（从 workflow 传入）
 BOARD_NAME="${1:-panther_x2}"
+KERNEL_VERSION="${2:-5.10.y}"
+
+echo "============================================"
+echo "  编译设备: ${BOARD_NAME}"
+echo "  内核版本: ${KERNEL_VERSION}"
+echo "============================================"
 
 # enable rk3568 model adc keys
 cp -f $GITHUB_WORKSPACE/configfiles/adc-keys.txt adc-keys.txt
@@ -160,6 +166,30 @@ esac
 
 # 禁止多设备编译（避免产生多个固件）
 echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
+
+# 根据内核版本设置内核配置
+echo ">>> 设置内核版本: ${KERNEL_VERSION}"
+case "${KERNEL_VERSION}" in
+    5.10.y)
+        echo 'CONFIG_LINUX_5_10=y' >> .config
+        ;;
+    5.15.y)
+        echo 'CONFIG_LINUX_5_15=y' >> .config
+        ;;
+    6.1.y)
+        echo 'CONFIG_LINUX_6_1=y' >> .config
+        ;;
+    6.6.y)
+        echo 'CONFIG_LINUX_6_6=y' >> .config
+        ;;
+    6.12.y)
+        echo 'CONFIG_LINUX_6_12=y' >> .config
+        ;;
+    *)
+        echo "未知内核版本: ${KERNEL_VERSION}，使用默认 5.10.y"
+        echo 'CONFIG_LINUX_5_10=y' >> .config
+        ;;
+esac
 
 # 重新生成默认配置
 make defconfig

@@ -27,6 +27,30 @@ on:
           - yijiahe_jm10
           - xunlong_orangepi-5-plus
           - lyt_t68m
+      openwrt_kernel:
+        description: "选择内核版本"
+        required: false
+        default: "5.10.y"
+        type: choice
+        options:
+          - 5.10.y
+          - 5.15.y
+          - 6.1.y
+          - 6.6.y
+          - 6.12.y
+      auto_kernel:
+        description: "自动使用最新内核"
+        required: false
+        default: true
+        type: boolean
+      kernel_repo:
+        description: "内核仓库"
+        required: false
+        default: "1737255535/kernel"
+        type: choice
+        options:
+          - 1737255535/kernel
+          - ophub/kernel
       source_branch:
         description: "选择源码分支"
         required: false
@@ -69,13 +93,22 @@ jobs:
       fail-fast: false
 
     steps:
-    - name: 设置设备名称
-      id: set-board
+    - name: 设置设备和内核信息
+      id: set-info
       run: |
         BOARD="${{ github.event.inputs.openwrt_board || 'panther_x2' }}"
+        KERNEL="${{ github.event.inputs.openwrt_kernel || '5.10.y' }}"
+        AUTO_KERNEL="${{ github.event.inputs.auto_kernel || 'true' }}"
+        KERNEL_REPO="${{ github.event.inputs.kernel_repo || '1737255535/kernel' }}"
         echo "BOARD=${BOARD}" >> $GITHUB_ENV
+        echo "KERNEL=${KERNEL}" >> $GITHUB_ENV
+        echo "AUTO_KERNEL=${AUTO_KERNEL}" >> $GITHUB_ENV
+        echo "KERNEL_REPO=${KERNEL_REPO}" >> $GITHUB_ENV
         echo "============================================"
         echo "  编译设备: ${BOARD}"
+        echo "  内核版本: ${KERNEL}"
+        echo "  自动最新内核: ${AUTO_KERNEL}"
+        echo "  内核仓库: ${KERNEL_REPO}"
         echo "  源码分支: ${{ matrix.REPO_BRANCH }}"
         echo "============================================"
 
@@ -159,7 +192,7 @@ jobs:
         CCACHE_DIR: /tmp/ccache
 
     - name: 限制 ccache 大小
-      run: ccache -M 1G
+      run: ccache -M 2G
 
     - name: 加载自定义 feeds
       env:
@@ -183,6 +216,73 @@ jobs:
         rm -rf tmp
         df -h
 
+    - name: 下载预编译内核
+      id: download-kernel
+      run: |
+        echo "============================================"
+        echo "  从 ${KERNEL_REPO} 下载预编译内核"
+        echo "  内核版本: ${KERNEL}"
+        echo "============================================"
+        
+        # 获取最新内核版本
+        KERNEL_VERSION=$(curl -fsSL "https://api.github.com/repos/${KERNEL_REPO}/releases/tags/kernel_rk35xx" | jq -r '.tag_name' || echo "")
+        
+        if [ -z "${KERNEL_VERSION}" ] || [ "${KERNEL_VERSION}" == "null" ]; then
+          echo "无法获取内核版本信息，将使用默认内核编译"
+          echo "status=skip" >> ${GITHUB_OUTPUT}
+          exit 0
+        fi
+        
+        echo "内核版本: ${KERNEL_VERSION}"
+        
+        # 下载内核文件
+        KERNEL_URL=$(curl -fsSL "https://api.github.com/repos/${KERNEL_REPO}/releases/tags/${KERNEL_VERSION}" | jq -r ".assets[] | select(.name | test(\"${KERNEL}.*rk35xx.*\\.tar\\.gz$\")) | .browser_download_url" | head -1)
+        
+        if [ -z "${KERNEL_URL}" ] || [ "${KERNEL_URL}" == "null" ]; then
+          echo "未找到匹配的内核文件，将使用默认内核编译"
+          echo "status=skip" >> ${GITHUB_OUTPUT}
+          exit 0
+        fi
+        
+        echo "下载地址: ${KERNEL_URL}"
+        
+        # 创建内核目录并下载
+        mkdir -p ${{ github.workspace }}/openwrt/dl/kernel
+        cd ${{ github.workspace }}/openwrt/dl/kernel
+        wget -q "${KERNEL_URL}" -O "kernel_rk35xx.tar.gz"
+        
+        if [ -f "kernel_rk35xx.tar.gz" ]; then
+          echo "内核下载成功"
+          echo "status=success" >> ${GITHUB_OUTPUT}
+          df -h
+        else
+          echo "内核下载失败，将使用默认内核编译"
+          echo "status=skip" >> ${GITHUB_OUTPUT}
+        fi
+
+    - name: 安装预编译内核
+      if: steps.download-kernel.outputs.status == 'success'
+      run: |
+        echo "============================================"
+        echo "  安装预编译内核"
+        echo "============================================"
+        
+        KERNEL_FILE="${{ github.workspace }}/openwrt/dl/kernel/kernel_rk35xx.tar.gz"
+        
+        if [ -f "${KERNEL_FILE}" ]; then
+          # 解压内核文件
+          cd ${{ github.workspace }}/openwrt
+          tar -xzf "${KERNEL_FILE}" -C dl/ || true
+          
+          # 清理内核编译目录（如果存在）
+          rm -rf build_dir/target-*/linux-* 2>/dev/null || true
+          
+          echo "预编译内核安装完成"
+          df -h
+        else
+          echo "内核文件不存在，跳过安装"
+        fi
+
     - name: 加载自定义配置
       env:
         CONFIG_FILE_PATH: ${{ matrix.ARCHITECTURE }}/${{ env.CONFIG_FILE }}
@@ -191,7 +291,7 @@ jobs:
         [ -e $CONFIG_FILE_PATH ] && mv $CONFIG_FILE_PATH openwrt/$CONFIG_FILE
         chmod +x $DIY_P2_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH "${{ env.BOARD }}"
+        $GITHUB_WORKSPACE/$DIY_P2_SH "${{ env.BOARD }}" "${{ env.KERNEL }}"
 
     - name: 下载软件包
       id: package
@@ -241,7 +341,7 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt_bin_${{ env.BOARD }}${{ env.FILE_DATE }}
+        name: OpenWrt_bin_${{ env.BOARD }}_${{ env.KERNEL }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
     - name: 整理固件文件
@@ -257,17 +357,19 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: OpenWrt_firmware_${{ env.BOARD }}${{ env.FILE_DATE }}
+        name: OpenWrt_firmware_${{ env.BOARD }}_${{ env.KERNEL }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: 生成发布标签
       id: tag
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ env.BOARD }}" >> ${GITHUB_OUTPUT}
+        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ env.BOARD }}-kernel${{ env.KERNEL }}" >> ${GITHUB_OUTPUT}
         touch release.txt
         echo "
         💻 设备: ${{ env.BOARD }}
+
+        🐧 内核: ${{ env.KERNEL }}
 
         📂 源码: ${{ env.REPO_URL }}
 
