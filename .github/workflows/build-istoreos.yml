@@ -27,6 +27,9 @@ env:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+      actions: write
     strategy:
       matrix:
         REPO_BRANCH:
@@ -122,6 +125,9 @@ jobs:
         prefix: ${{ github.workspace }}/openwrt
       env:
         CCACHE_DIR: /tmp/ccache
+        
+    - name: 限制 ccache 大小
+      run: ccache -M 2G
 
     - name: 加载自定义 feeds
       env:
@@ -164,12 +170,18 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
         
-    # - name: 清理旧的编译目录
-    #   run: |
-    #     cd openwrt
-    #     rm -rf build_dir
-    #     rm -rf staging_dir/target-*   # 可选
+    - name: 清理旧的构建产物
+      run: |
+        cd openwrt
+        rm -rf build_dir/target-* staging_dir/target-*
 
+    - name: 检查可用磁盘空间
+      run: |
+        AVAIL=$(df -BG --output=avail / | tail -1 | tr -d 'G ')
+        if [ "$AVAIL" -lt 5 ]; then
+          echo "磁盘剩余空间不足 5GB，终止编译"
+          exit 1
+        fi
 
     - name: 编译固件
       id: compile
