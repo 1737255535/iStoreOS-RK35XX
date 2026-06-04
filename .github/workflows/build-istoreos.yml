@@ -41,22 +41,12 @@ jobs:
       fail-fast: false
 
     steps:
-    # - name: 合并磁盘
-    #   uses: easimon/maximize-build-space@master
-    #   with:
-    #     swap-size-mb: 1024
-    #     temp-reserve-mb: 100
-    #     root-reserve-mb: 1024
-
     - name: 合并磁盘
       uses: easimon/maximize-build-space@master
       with:
-        root-reserve-mb: 512          # 减少保留空间（默认 1024，可以降到 256）
-        swap-size-mb: 2048            # 增加 swap 防止内存不足
-        remove-dotnet: true           # 默认就清理 .NET
-        remove-android: true          # 清理 Android SDK
-        remove-haskell: true          # 清理 Haskell 工具链
-        remove-codeql: true           # 清理 CodeQL
+        swap-size-mb: 1024
+        temp-reserve-mb: 100
+        root-reserve-mb: 1024
 
     - name: 准备完成
       uses: actions/checkout@main
