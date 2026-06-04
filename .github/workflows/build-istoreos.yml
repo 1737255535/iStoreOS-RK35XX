@@ -49,7 +49,12 @@ jobs:
       with:
         swap-size-mb: 4096
         temp-reserve-mb: 512
-        root-reserve-mb: 256
+        root-reserve-mb: 1024
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
 
     - name: 准备完成
       uses: actions/checkout@main
@@ -80,26 +85,22 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         echo "------------------------------- 更新并安装依赖 -------------------------------"
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /etc/mysql /etc/php /usr/local/lib/android /opt/ghc
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /etc/mysql /etc/php /opt/ghc
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install $(cat $GITHUB_WORKSPACE/depends/${{ matrix.os }})
-        wget https://bootstrap.pypa.io/pip/3.6/get-pip.py
-        sudo python3 get-pip.py
-        sudo rm -rf get-pip.py
-        sudo pip install pyelftools
+        sudo -E apt-get -qq install python3-pip
+        sudo pip3 install --break-system-packages pyelftools || sudo pip3 install pyelftools || true
         echo "------------------------------- 清理Docker镜像和软件 -------------------------------"
-        [ -n "$(docker images -q)" ] && docker rmi $(docker images -q)
-        docker image prune -a -f
+        [ -n "$(docker images -q)" ] && docker rmi $(docker images -q) || true
+        docker image prune -a -f || true
         sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* dotnet* moby* snapd* android* || true
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         echo "------------------------------- 深度清理系统空间 -------------------------------"
         sudo rm -rf /usr/share/doc /usr/share/man /usr/share/locale /usr/share/info
         sudo rm -rf /usr/share/vim /usr/share/nano /usr/share/lintian /usr/share/linda
-        sudo rm -rf /usr/local/lib /usr/local/share /usr/local/bin
         sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
         sudo rm -rf /var/cache/pip /root/.cache
-        sudo rm -rf /snap /var/snap
         sudo rm -rf /usr/share/pixmaps /usr/share/icons /usr/share/applications
         sudo rm -rf /usr/share/fonts /usr/share/groff /usr/share/texinfo
         df -h
@@ -158,7 +159,6 @@ jobs:
       run: |
         cd openwrt
         find feeds -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
-        find . -name ".git" -maxdepth 2 -type d -exec rm -rf {} + 2>/dev/null || true
         rm -rf tmp
         df -h
 
