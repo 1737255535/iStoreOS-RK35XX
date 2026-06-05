@@ -164,8 +164,9 @@ case "${BOARD_NAME}" in
         ;;
 esac
 
-# 禁止多设备编译（避免产生多个固件）
-echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
+# 禁止多设备编译（避免产生多个固件）- 使用 sed 替换而非追加
+sed -i 's/^CONFIG_TARGET_MULTI_PROFILE=y/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
+sed -i 's/^CONFIG_TARGET_MULTI_PROFILE is not set.*/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
 
 # 根据内核版本设置内核配置
 echo ">>> 设置内核版本: ${KERNEL_VERSION}"
@@ -193,3 +194,14 @@ esac
 
 # 重新生成默认配置
 make defconfig
+
+# 验证配置结果
+echo "============================================"
+echo "  验证编译配置"
+echo "============================================"
+echo "设备选择:"
+grep -E "CONFIG_TARGET_DEVICE_rockchip_rk35xx_DEVICE_" .config | grep -v "^#" || echo "  警告: 未找到设备配置"
+echo ""
+echo "多配置状态:"
+grep "CONFIG_TARGET_MULTI_PROFILE" .config || echo "  多配置已禁用"
+echo "============================================"
