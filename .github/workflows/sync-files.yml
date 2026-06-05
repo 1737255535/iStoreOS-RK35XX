@@ -24,6 +24,7 @@ jobs:
            content=$(cat ${GITHUB_WORKSPACE}/configfiles/config_data.txt)
            configdata=$(echo "$content" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
            sed -i "/CONFIG_TARGET_DEVICE_rockchip_.*=.*/d" ./rk35xx/.config
+           sed -i "/CONFIG_TARGET_MULTI_PROFILE/d" ./rk35xx/.config
            sed -i "/CONFIG_PACKAGE_dtc.*=.*/d" ./rk35xx/.config
            sed -i "/CONFIG_PACKAGE_luci-app-istorex.*=.*/d" ./rk35xx/.config
            # sed -i "s/CONFIG_PACKAGE_rtl8821ce-firmware=y/CONFIG_PACKAGE_rtl8821ce-firmware=n/" ./rk35xx/.config
